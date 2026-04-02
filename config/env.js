@@ -1,17 +1,18 @@
-import { config } from "dotenv";
+import dotenv from "dotenv";
 
 const env = process.env.NODE_ENV || "development";
 
-// Load environment-specific file first
-config({ path: `.env.${env}.local` });
+// Load base .env first
+dotenv.config();
 
-// Fallback to default .env
-config();
+// Then override with environment-specific file if it exists
+dotenv.config({ path: `.env.${env}.local` });
 
 export const {
   PORT,
   NODE_ENV,
   JWT_SECRET,
   JWT_EXPIRES_IN,
-  DATABASE_URL
+  DATABASE_URL,
+  FRONTEND_URL
 } = process.env;
