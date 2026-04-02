@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 
 export const protect = (req, res, next) => {
-  const token = req.cookies?.token;
+  const token = req.cookies?.accessToken;
 
   if (!token) {
     return res.status(401).json({
@@ -14,7 +14,7 @@ export const protect = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     if (!decoded?.id) {
-      return res.status(403).json({
+      return res.status(401).json({
         success: false,
         error: 'Invalid token payload.'
       });
@@ -24,7 +24,7 @@ export const protect = (req, res, next) => {
     next();
   } catch (error) {
     console.error('Token verification error:', error.message);
-    return res.status(403).json({
+    return res.status(401).json({
       success: false,
       error: 'Invalid or expired token. Please log in again.'
     });
@@ -36,8 +36,8 @@ export const verifyToken = (req, res, next) => {
   const token = req.cookies.accessToken;
   if (!token) return res.status(401).json({ message: 'Access denied, token missing' });
 
-  jwt.verify(token, "secretkey", (err, user) => {
-    if (err) return res.status(403).json({ message: 'Invalid token' });
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(401).json({ message: 'Invalid token' });
     req.user = user;
     next();
   });

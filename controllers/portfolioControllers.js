@@ -1,6 +1,6 @@
-import db from "../config/db.js";
+import sql from "../config/db.js";
 import jwt from "jsonwebtoken";
-import { JWT_SECRET } from "../config/env.js"; // 👈 import from env.js
+import { JWT_SECRET } from "../config/env.js";
 
 // Helper: extract user ID from JWT cookie
 const getUserIdFromToken = (req, res) => {
@@ -11,7 +11,7 @@ const getUserIdFromToken = (req, res) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET); // 👈 use env secret
+    const decoded = jwt.verify(token, JWT_SECRET);
     return decoded.id;
   } catch (err) {
     res.status(403).json({ error: "Invalid or expired token." });
@@ -22,7 +22,7 @@ const getUserIdFromToken = (req, res) => {
 // 📌 GET ALL PORTFOLIOS (PUBLIC OR ADMIN)
 export const getAllPortfolios = async (req, res) => {
   try {
-    const [rows] = await db.promise().query("SELECT * FROM portfolios ORDER BY id DESC");
+    const rows = await sql`SELECT * FROM portfolios ORDER BY id DESC`;
     if (rows.length === 0) {
       return res.status(404).json({ error: "No portfolios found" });
     }
@@ -38,7 +38,7 @@ export const createPortfolio = async (req, res) => {
   const token = req.cookies.accessToken;
   if (!token) return res.status(401).json({ error: "Unauthorized. No token." });
 
-  jwt.verify(token, JWT_SECRET, async (err, decoded) => { // 👈 use env secret
+  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
     if (err) return res.status(403).json({ error: "Invalid token." });
 
     const userId = decoded.id;
@@ -63,32 +63,18 @@ export const createPortfolio = async (req, res) => {
     }
 
     try {
-      const sql = `
+      await sql`
         INSERT INTO portfolios (
           user_id, full_name, profession_title, phone, email, location,
           about_me, experience_years, skills, certifications, languages,
           availability, portfolio_url, profile_image_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (
+          ${userId}, ${full_name}, ${profession_title}, ${phone || null}, ${email}, ${location},
+          ${about_me}, ${experience_years ? Number(experience_years) : null}, ${skills || null},
+          ${certifications || null}, ${languages || null}, ${availability || "full-time"},
+          ${portfolio_url || null}, ${profile_image_url || null}
+        )
       `;
-
-      const values = [
-        userId,
-        full_name,
-        profession_title,
-        phone || null,
-        email,
-        location,
-        about_me,
-        experience_years ? Number(experience_years) : null,
-        skills || null,
-        certifications || null,
-        languages || null,
-        availability || "full-time",
-        portfolio_url || null,
-        profile_image_url || null
-      ];
-
-      await db.promise().query(sql, values);
       res.status(201).json({ message: "Portfolio created successfully" });
     } catch (error) {
       console.error("Portfolio creation failed:", error);
@@ -103,10 +89,7 @@ export const getPortfolioByUserId = async (req, res) => {
   if (!userId) return;
 
   try {
-    const [rows] = await db.promise().query(
-      "SELECT * FROM portfolios WHERE user_id = ?",
-      [userId]
-    );
+    const rows = await sql`SELECT * FROM portfolios WHERE user_id = ${userId}`;
     if (rows.length === 0) return res.status(404).json({ error: "Portfolio not found" });
     res.status(200).json(rows[0]);
   } catch (error) {
@@ -123,10 +106,7 @@ export const getPortfolioById = async (req, res) => {
       return res.status(400).json({ error: "Invalid portfolio ID" });
     }
 
-    const [results] = await db.promise().query(
-      "SELECT * FROM portfolios WHERE id = ?",
-      [portfolioId]
-    );
+    const results = await sql`SELECT * FROM portfolios WHERE id = ${portfolioId}`;
     if (results.length === 0) {
       return res.status(404).json({ error: "Portfolio not found" });
     }
@@ -142,7 +122,7 @@ export const updatePortfolio = async (req, res) => {
   const token = req.cookies.accessToken;
   if (!token) return res.status(401).json({ error: "Unauthorized. No token." });
 
-  jwt.verify(token, JWT_SECRET, async (err, decoded) => { // 👈 use env secret
+  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
     if (err) return res.status(403).json({ error: "Invalid token." });
 
     const userId = decoded.id;
@@ -168,44 +148,31 @@ export const updatePortfolio = async (req, res) => {
     } = req.body;
 
     try {
-      const [existing] = await db
-        .promise()
-        .query("SELECT * FROM portfolios WHERE id = ? AND user_id = ?", [
-          portfolioId,
-          userId
-        ]);
+      const existing = await sql`
+        SELECT * FROM portfolios WHERE id = ${portfolioId} AND user_id = ${userId}
+      `;
 
       if (existing.length === 0) {
         return res.status(404).json({ error: "Portfolio not found or not yours" });
       }
 
-      const sql = `
+      await sql`
         UPDATE portfolios
-        SET full_name = ?, profession_title = ?, phone = ?, email = ?, location = ?, 
-            about_me = ?, experience_years = ?, skills = ?, certifications = ?, 
-            languages = ?, availability = ?, portfolio_url = ?, profile_image_url = ?
-        WHERE id = ? AND user_id = ?
+        SET full_name = ${full_name || existing[0].full_name},
+            profession_title = ${profession_title || existing[0].profession_title},
+            phone = ${phone || existing[0].phone},
+            email = ${email || existing[0].email},
+            location = ${location || existing[0].location},
+            about_me = ${about_me || existing[0].about_me},
+            experience_years = ${experience_years ? Number(experience_years) : existing[0].experience_years},
+            skills = ${skills || existing[0].skills},
+            certifications = ${certifications || existing[0].certifications},
+            languages = ${languages || existing[0].languages},
+            availability = ${availability || existing[0].availability},
+            portfolio_url = ${portfolio_url || existing[0].portfolio_url},
+            profile_image_url = ${profile_image_url || existing[0].profile_image_url}
+        WHERE id = ${portfolioId} AND user_id = ${userId}
       `;
-
-      const values = [
-        full_name || existing[0].full_name,
-        profession_title || existing[0].profession_title,
-        phone || existing[0].phone,
-        email || existing[0].email,
-        location || existing[0].location,
-        about_me || existing[0].about_me,
-        experience_years ? Number(experience_years) : existing[0].experience_years,
-        skills || existing[0].skills,
-        certifications || existing[0].certifications,
-        languages || existing[0].languages,
-        availability || existing[0].availability,
-        portfolio_url || existing[0].portfolio_url,
-        profile_image_url || existing[0].profile_image_url,
-        portfolioId,
-        userId
-      ];
-
-      await db.promise().query(sql, values);
       res.status(200).json({ message: "Portfolio updated successfully" });
     } catch (error) {
       console.error("Portfolio update failed:", error);
@@ -219,7 +186,7 @@ export const deletePortfolio = async (req, res) => {
   const token = req.cookies.accessToken;
   if (!token) return res.status(401).json({ error: "Unauthorized. No token." });
 
-  jwt.verify(token, JWT_SECRET, async (err, decoded) => { // 👈 use env secret
+  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
     if (err) return res.status(403).json({ error: "Invalid token." });
 
     const userId = decoded.id;
@@ -229,23 +196,15 @@ export const deletePortfolio = async (req, res) => {
     }
 
     try {
-      const [existing] = await db
-        .promise()
-        .query("SELECT * FROM portfolios WHERE id = ? AND user_id = ?", [
-          portfolioId,
-          userId
-        ]);
+      const existing = await sql`
+        SELECT * FROM portfolios WHERE id = ${portfolioId} AND user_id = ${userId}
+      `;
 
       if (existing.length === 0) {
         return res.status(404).json({ error: "Portfolio not found or not yours" });
       }
 
-      await db
-        .promise()
-        .query("DELETE FROM portfolios WHERE id = ? AND user_id = ?", [
-          portfolioId,
-          userId
-        ]);
+      await sql`DELETE FROM portfolios WHERE id = ${portfolioId} AND user_id = ${userId}`;
 
       res.status(200).json({ message: "Portfolio deleted successfully" });
     } catch (error) {

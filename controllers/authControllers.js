@@ -1,8 +1,9 @@
 // controllers/authController.js
-import db from "../config/db.js";
+import sql from "../config/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { JWT_SECRET, JWT_EXPIRES_IN } from "../config/env.js";
+const JWT_SECRET = process.env.JWT_SECRET;
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
 
 // REGISTER
 export const register = async (req, res) => {
@@ -20,37 +21,40 @@ export const register = async (req, res) => {
   }
 
   try {
-    const [existingUsers] = await db.promise().query(
-      "SELECT id FROM users WHERE email = ? OR username = ? LIMIT 1",
-      [req.body.email, req.body.username]
-    );
+    const existingUsers = await sql`
+      SELECT id FROM users WHERE email = ${req.body.email} OR username = ${req.body.username} LIMIT 1
+    `;
 
     if (existingUsers.length > 0) {
       return res.status(409).json({ error: "User already exists" });
     }
 
     const hashedPassword = await bcrypt.hash(req.body.password, 12);
-    const [result] = await db.promise().query(
-      "INSERT INTO users (username, email, password, created_at) VALUES (?, ?, ?, NOW())",
-      [req.body.username, req.body.email, hashedPassword]
-    );
+    const result = await sql`
+      INSERT INTO users (username, email, password)
+      VALUES (${req.body.username}, ${req.body.email}, ${hashedPassword})
+      RETURNING id
+    `;
+
+    console.log("[register] New user id:", result[0].id);
 
     return res.status(201).json({
       success: true,
       message: "User registered",
-      userId: result.insertId,
+      userId: result[0].id,
     });
   } catch (err) {
-    console.error("Registration error:", err);
+    console.error("[register] SQL error:", err);
     return res.status(500).json({ error: "Server error during registration" });
   }
 };
 
 // LOGIN
 export const login = async (req, res) => {
-  const q = "SELECT * FROM users WHERE username = ?";
-  db.query(q, [req.body.username], async (err, data) => {
-    if (err) return res.status(500).json(err);
+  try {
+    const data = await sql`SELECT * FROM users WHERE username = ${req.body.username}`;
+    console.log("[login] Query result:", data);
+
     if (data.length === 0) return res.status(404).json("User not found!");
 
     const user = data[0];
@@ -68,44 +72,59 @@ export const login = async (req, res) => {
     res
       .cookie("accessToken", token, {
         httpOnly: true,
-        sameSite: "strict",
-        secure: process.env.NODE_ENV === "production", // only secure in prod
+        sameSite: "lax",           // "strict" blocks cross-origin cookies in dev
+        secure: false,             // must be false for http://localhost
       })
       .status(200)
       .json(userData);
-  });
+  } catch (err) {
+    console.error("[login] SQL error:", err);
+    return res.status(500).json({ error: "Server error during login" });
+  }
 };
 
 // LOGOUT
 export const logout = (req, res) => {
   res.clearCookie("accessToken", {
-    sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    secure: false,
     httpOnly: true,
   });
   res.status(200).json("User logged out");
 };
 
-// GET USER
+// GET USER  (/auth/me)
 export const getUser = (req, res) => {
-  const token = req.cookies.accessToken;
+  // Accept token from cookie OR Authorization header
+  const cookieToken = req.cookies?.accessToken;
+  const headerToken = req.headers?.authorization?.startsWith("Bearer ")
+    ? req.headers.authorization.split(" ")[1]
+    : null;
+
+  const token = cookieToken || headerToken;
+
+  console.log("[getUser] cookie token present:", !!cookieToken, "| header token present:", !!headerToken);
+
   if (!token) return res.status(401).json("Not authenticated");
 
   jwt.verify(token, JWT_SECRET, async (err, decoded) => {
-    if (err) return res.status(403).json("Token invalid");
+    if (err) {
+      console.error("[getUser] JWT verify error:", err.message);
+      return res.status(401).json("Token invalid");
+    }
 
     try {
-      const [rows] = await db
-        .promise()
-        .query("SELECT id, username, email, role FROM users WHERE id = ?", [
-          decoded.id,
-        ]);
+      const rows = await sql`
+        SELECT id, username, email, role FROM users WHERE id = ${decoded.id}
+      `;
+
+      console.log("[getUser] rows found:", rows.length);
 
       if (rows.length === 0) return res.status(404).json("User not found");
 
       return res.status(200).json(rows[0]);
     } catch (error) {
-      console.error("Database error:", error);
+      console.error("[getUser] Database error:", error);
       return res.status(500).json("Internal server error");
     }
   });

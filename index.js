@@ -1,6 +1,6 @@
+import {PORT} from "./config/env.js";
 import express from "express";
 import cors from "cors";
-import db from "./config/db.js";
 import userRoutes from "./routes/usersRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import portfolioRoute from "./routes/portfolioRoute.js";
@@ -10,7 +10,7 @@ import searchRoutes from "./routes/searchRoutes.js";
 import adminRoute from "./routes/adminRoute.js"
 import cookieParser from "cookie-parser";
 import { protect } from "./middlewares/AuthMiddleware.js";
-import {PORT} from "./config/env.js";
+
 
 
 const app = express();

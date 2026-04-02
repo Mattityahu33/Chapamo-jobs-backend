@@ -1,5 +1,4 @@
-
-import db from "../config/db.js";
+import sql from "../config/db.js";
 
 // Unified search for jobs and portfolios
 export const unifiedSearch = async (req, res) => {
@@ -9,9 +8,9 @@ export const unifiedSearch = async (req, res) => {
       location,
       jobTypes,
       categories,
-      category,            // ← Add this
+      category,
       industries,
-      industry,            // ← Add this
+      industry,
       experienceLevels,
       remote,
       minSalary,
@@ -20,78 +19,89 @@ export const unifiedSearch = async (req, res) => {
 
     const jobParams = [];
     const portfolioParams = [];
+    let jobParamIndex = 1;
+    let portfolioParamIndex = 1;
 
     // ---------- Job Query ----------
-    let jobQuery = `SELECT * FROM job_postings WHERE 1=1`;
+    let jobConditions = [`1=1`];
 
     if (search) {
       const keyword = `%${search}%`;
-      jobQuery += ` AND (advert_title LIKE ? OR company_name LIKE ? OR description LIKE ?)`;
+      jobConditions.push(`(advert_title ILIKE $${jobParamIndex} OR company_name ILIKE $${jobParamIndex + 1} OR description ILIKE $${jobParamIndex + 2})`);
       jobParams.push(keyword, keyword, keyword);
+      jobParamIndex += 3;
     }
 
     if (location) {
-      jobQuery += ` AND location LIKE ?`;
+      jobConditions.push(`location ILIKE $${jobParamIndex++}`);
       jobParams.push(`%${location}%`);
     }
 
     if (jobTypes) {
       const types = jobTypes.split(',');
-      jobQuery += ` AND job_type IN (${types.map(() => '?').join(',')})`;
+      const placeholders = types.map(() => `$${jobParamIndex++}`).join(',');
+      jobConditions.push(`job_type IN (${placeholders})`);
       jobParams.push(...types);
     }
 
     if (category) {
-      jobQuery += ` AND category = ?`;
+      jobConditions.push(`category = $${jobParamIndex++}`);
       jobParams.push(category);
     }
 
     if (categories) {
       const cats = categories.split(',');
-      jobQuery += ` AND category IN (${cats.map(() => '?').join(',')})`;
+      const placeholders = cats.map(() => `$${jobParamIndex++}`).join(',');
+      jobConditions.push(`category IN (${placeholders})`);
       jobParams.push(...cats);
     }
 
     if (experienceLevels) {
       const levels = experienceLevels.split(',');
-      jobQuery += ` AND experience_level IN (${levels.map(() => '?').join(',')})`;
+      const placeholders = levels.map(() => `$${jobParamIndex++}`).join(',');
+      jobConditions.push(`experience_level IN (${placeholders})`);
       jobParams.push(...levels);
     }
 
     if (remote) {
-      jobQuery += ` AND is_remote = ?`;
-      jobParams.push(remote === 'true' ? 1 : 0);
+      jobConditions.push(`is_remote = $${jobParamIndex++}`);
+      jobParams.push(remote === 'true');
     }
 
     if (minSalary) {
-      jobQuery += ` AND (salary >= ? OR salary IS NULL)`;
+      jobConditions.push(`(salary >= $${jobParamIndex++} OR salary IS NULL)`);
       jobParams.push(parseInt(minSalary));
     }
 
     if (maxSalary) {
-      jobQuery += ` AND (salary <= ? OR salary IS NULL)`;
+      jobConditions.push(`(salary <= $${jobParamIndex++} OR salary IS NULL)`);
       jobParams.push(parseInt(maxSalary));
     }
 
-    jobQuery += ` ORDER BY created_at DESC`;
-
     // ---------- Portfolio Query ----------
-    let portfolioQuery = `SELECT * FROM portfolios WHERE 1=1`;
+    let portfolioConditions = [`1=1`];
 
     if (search) {
       const keyword = `%${search}%`;
-      portfolioQuery += ` AND (full_name LIKE ? OR profession_title LIKE ? OR about_me LIKE ?)`;
+      portfolioConditions.push(`(full_name ILIKE $${portfolioParamIndex} OR profession_title ILIKE $${portfolioParamIndex + 1} OR about_me ILIKE $${portfolioParamIndex + 2})`);
       portfolioParams.push(keyword, keyword, keyword);
+      portfolioParamIndex += 3;
     }
 
     if (location) {
-      portfolioQuery += ` AND location LIKE ?`;
+      portfolioConditions.push(`location ILIKE $${portfolioParamIndex++}`);
       portfolioParams.push(`%${location}%`);
     }
 
     // ---------- Execute both queries ----------
-    const [jobs] = await db.promise().query(jobQuery, jobParams);
-    const [portfolios] = await db.promise().query(portfolioQuery, portfolioParams);
+    const jobs = await sql.unsafe(
+      `SELECT * FROM job_postings WHERE ${jobConditions.join(' AND ')} ORDER BY created_at DESC`,
+      jobParams
+    );
+    const portfolios = await sql.unsafe(
+      `SELECT * FROM portfolios WHERE ${portfolioConditions.join(' AND ')}`,
+      portfolioParams
+    );
 
     res.status(200).json({ jobs, portfolios });
   } catch (err) {
