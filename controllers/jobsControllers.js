@@ -26,6 +26,11 @@ export const getAllJobs = async (req, res, next) => {
       params.push(...types);
     }
 
+    if (req.query.category) {
+      conditions.push(`category = $${paramIndex++}`);
+      params.push(req.query.category);
+    }
+
     if (req.query.categories) {
       const categories = req.query.categories.split(',');
       const placeholders = categories.map(() => `$${paramIndex++}`).join(',');
@@ -61,7 +66,11 @@ export const getAllJobs = async (req, res, next) => {
       params
     );
 
-    res.json({ success: true, data: results });
+    // Ensure results is always an array for frontend compatibility
+    res.json({ 
+      success: true, 
+      data: Array.isArray(results) ? results : [] 
+    });
   } catch (err) {
     next(err);
   }
@@ -82,7 +91,11 @@ export const getJobById = async (req, res, next) => {
 
     if (results.length === 0) return res.status(404).json({ success: false, message: "Job not found" });
 
-    res.json({ success: true, data: results[0] });
+    // For single items, the data contract expects the object directly or null
+    res.json({ 
+      success: true, 
+      data: results[0] || null 
+    });
   } catch (err) {
     next(err);
   }
@@ -168,7 +181,10 @@ export const getApplications = async (req, res, next) => {
   try {
     const jobId = parseInt(req.params.id);
     const apps = await sql`SELECT * FROM applications WHERE job_id = ${jobId}`;
-    res.json({ success: true, data: apps });
+    res.json({ 
+      success: true, 
+      data: Array.isArray(apps) ? apps : [] 
+    });
   } catch (err) {
     next(err);
   }
@@ -220,7 +236,10 @@ export const getSavedJobs = async (req, res, next) => {
       JOIN saved_jobs s ON j.id = s.job_id
       WHERE s.user_id = ${userId}
     `;
-    res.json({ success: true, data: jobs });
+    res.json({ 
+      success: true, 
+      data: Array.isArray(jobs) ? jobs : [] 
+    });
   } catch (err) {
     next(err);
   }
@@ -237,7 +256,11 @@ export const getCategories = async (req, res, next) => {
     const results = await sql`
       SELECT DISTINCT category FROM job_postings ORDER BY category
     `;
-    res.json({ success: true, data: results.map(r => r.category) });
+    const categories = Array.isArray(results) ? results.map(r => r.category) : [];
+    res.json({ 
+      success: true, 
+      data: categories 
+    });
   } catch (err) {
     next(err);
   }
@@ -263,7 +286,10 @@ export const getSimilarJobs = async (req, res, next) => {
       LIMIT 4
     `;
 
-    res.json({ success: true, data: similar });
+    res.json({ 
+      success: true, 
+      data: Array.isArray(similar) ? similar : [] 
+    });
   } catch (err) {
     next(err);
   }

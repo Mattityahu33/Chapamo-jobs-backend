@@ -14,18 +14,15 @@ export function verifyAdmin(req, res, next) {
   }
 }
 
-/**
- * Fetches all registered users
- * Purpose: Provides a list of all users for admin management
- * Inputs: None
- * Outputs: JSON response with an array of users
- */
 export const getAllUsers = async (req, res, next) => {
   try {
     const rows = await sql`
       SELECT id, username, email, role, status, created_at FROM users
     `;
-    res.json({ success: true, data: rows });
+    res.json({ 
+      success: true, 
+      data: Array.isArray(rows) ? rows : [] 
+    });
   } catch (err) {
     next(err);
   }
@@ -69,7 +66,10 @@ export const updateUserStatus = async (req, res, next) => {
 export const getPendingJobs = async (req, res, next) => {
   try {
     const rows = await sql`SELECT * FROM job_postings WHERE status = 'pending'`;
-    res.json({ success: true, data: rows });
+    res.json({ 
+      success: true, 
+      data: Array.isArray(rows) ? rows : [] 
+    });
   } catch (err) {
     next(err);
   }

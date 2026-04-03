@@ -14,7 +14,10 @@ export const getAllPortfolios = async (req, res, next) => {
     if (rows.length === 0) {
       return res.status(404).json({ success: false, message: "No portfolios found" });
     }
-    res.status(200).json({ success: true, data: rows });
+    res.status(200).json({ 
+      success: true, 
+      data: Array.isArray(rows) ? rows : [] 
+    });
   } catch (error) {
     next(error);
   }
@@ -83,7 +86,10 @@ export const getPortfolioByUserId = async (req, res, next) => {
   try {
     const rows = await sql`SELECT * FROM portfolios WHERE user_id = ${userId}`;
     if (rows.length === 0) return res.status(404).json({ success: false, message: "Portfolio not found" });
-    res.status(200).json({ success: true, data: rows[0] });
+    res.status(200).json({ 
+      success: true, 
+      data: rows[0] || null 
+    });
   } catch (error) {
     next(error);
   }
@@ -106,7 +112,10 @@ export const getPortfolioById = async (req, res, next) => {
     if (results.length === 0) {
       return res.status(404).json({ success: false, message: "Portfolio not found" });
     }
-    res.json({ success: true, data: results[0] });
+    res.json({ 
+      success: true, 
+      data: results[0] || null 
+    });
   } catch (err) {
     next(err);
   }

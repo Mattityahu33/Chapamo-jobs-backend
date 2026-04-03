@@ -108,7 +108,10 @@ export const unifiedSearch = async (req, res, next) => {
 
     res.status(200).json({
         success: true,
-        data: { jobs, portfolios }
+        data: {
+          jobs: Array.isArray(jobs) ? jobs : [],
+          portfolios: Array.isArray(portfolios) ? portfolios : []
+        }
     });
   } catch (err) {
     next(err);

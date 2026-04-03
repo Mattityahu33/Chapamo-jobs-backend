@@ -13,6 +13,7 @@ import searchRoutes from "./routes/searchRoutes.js";
 import adminRoute from "./routes/adminRoute.js"
 import { protect } from "./middlewares/AuthMiddleware.js";
 
+
 const app = express();
 
 // 1. Security Headers (Helmet)
@@ -20,11 +21,25 @@ app.use(helmet());
 
 // 2. CORS - Explicit origin and credentials
 // ⚠️ REQUIRED: Set this to your Vercel frontend URL in config/env.js
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.LOCAL_FRONTEND_URL
+];
+
 app.use(cors({
-    origin: FRONTEND_URL,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cookie"]
+  origin: function (origin, callback) {
+    // allow requests with no origin (like Postman)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    } else {
+      return callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 // 3. Rate Limiting

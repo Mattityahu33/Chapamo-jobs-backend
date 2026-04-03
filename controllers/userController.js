@@ -83,7 +83,7 @@ export const getSavedJobs = async (req, res, next) => {
 
     return res.status(200).json({
         success: true,
-        data: rows
+        data: Array.isArray(rows) ? rows : []
     });
   } catch (err) {
     next(err);
