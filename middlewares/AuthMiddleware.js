@@ -1,46 +1,44 @@
 import jwt from 'jsonwebtoken';
+import { JWT_SECRET } from '../config/env.js';
 
+/**
+ * Middleware to protect routes that require authentication
+ * Purpose: Verifies the accessToken from cookies
+ * Inputs: req.cookies.accessToken
+ * Output: Sets req.user or returns 401
+ */
 export const protect = (req, res, next) => {
   const token = req.cookies?.accessToken;
 
   if (!token) {
     return res.status(401).json({
       success: false,
-      error: 'Missing token. Access denied.'
+      message: 'Missing authentication token. Please log in.'
     });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, JWT_SECRET);
 
     if (!decoded?.id) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid token payload.'
+        message: 'Invalid token payload.'
       });
     }
 
     req.user = { id: decoded.id };
     next();
   } catch (error) {
-    console.error('Token verification error:', error.message);
+    console.error('🔴 Token verification error:', error.message);
     return res.status(401).json({
       success: false,
-      error: 'Invalid or expired token. Please log in again.'
+      message: 'Invalid or expired token. Please log in again.'
     });
   }
 };
 
-
-export const verifyToken = (req, res, next) => {
-  const token = req.cookies.accessToken;
-  if (!token) return res.status(401).json({ message: 'Access denied, token missing' });
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(401).json({ message: 'Invalid token' });
-    req.user = user;
-    next();
-  });
-};
-
-
+/**
+ * Alias for protect, ensures backward compatibility if used
+ */
+export const verifyToken = protect;

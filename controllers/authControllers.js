@@ -2,138 +2,166 @@
 import sql from "../config/db.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN;
+import { JWT_SECRET, JWT_EXPIRES_IN, NODE_ENV } from "../config/env.js";
 
-// REGISTER
-export const register = async (req, res) => {
-  if (!req.body.username || !req.body.email || !req.body.password) {
-    return res.status(400).json({ error: "Username, email, and password are required" });
+/**
+ * Registers a new user
+ * Purpose: Hashes password and saves user to database
+ * Inputs: req.body { username, email, password }
+ * Outputs: JSON response with success status and userId
+ */
+export const register = async (req, res, next) => {
+  const { username, email, password } = req.body;
+
+  if (!username || !email || !password) {
+    return res.status(400).json({ success: false, message: "Username, email, and password are required" });
   }
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(req.body.email)) {
-    return res.status(400).json({ error: "Invalid email format" });
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ success: false, message: "Invalid email format" });
   }
 
-  if (req.body.password.length < 8) {
-    return res.status(400).json({ error: "Password must be at least 8 characters" });
+  if (password.length < 8) {
+    return res.status(400).json({ success: false, message: "Password must be at least 8 characters" });
   }
 
   try {
     const existingUsers = await sql`
-      SELECT id FROM users WHERE email = ${req.body.email} OR username = ${req.body.username} LIMIT 1
+      SELECT id FROM users WHERE email = ${email} OR username = ${username} LIMIT 1
     `;
 
     if (existingUsers.length > 0) {
-      return res.status(409).json({ error: "User already exists" });
+      return res.status(409).json({ success: false, message: "User already exists" });
     }
 
-    const hashedPassword = await bcrypt.hash(req.body.password, 12);
+    const hashedPassword = await bcrypt.hash(password, 12);
     const result = await sql`
       INSERT INTO users (username, email, password)
-      VALUES (${req.body.username}, ${req.body.email}, ${hashedPassword})
+      VALUES (${username}, ${email}, ${hashedPassword})
       RETURNING id
     `;
 
-    console.log("[register] New user id:", result[0].id);
+    console.log("🟢 [Auth] New user registered:", result[0].id);
 
     return res.status(201).json({
       success: true,
-      message: "User registered",
-      userId: result[0].id,
+      message: "User registered successfully",
+      data: { userId: result[0].id },
     });
   } catch (err) {
-    console.error("[register] SQL error:", err);
-    return res.status(500).json({ error: "Server error during registration" });
+    next(err); // Pass to global error handler
   }
 };
 
-// LOGIN
-export const login = async (req, res) => {
-  try {
-    const data = await sql`SELECT * FROM users WHERE username = ${req.body.username}`;
-    console.log("[login] Query result:", data);
+/**
+ * Logs in a user
+ * Purpose: Validates credentials, generates JWT, and sets secure cookie
+ * Inputs: req.body { username, password }
+ * Outputs: JSON response with user data and accessToken cookie
+ */
+export const login = async (req, res, next) => {
+  const { username, password } = req.body;
 
-    if (data.length === 0) return res.status(404).json("User not found!");
+  try {
+    const data = await sql`SELECT * FROM users WHERE username = ${username}`;
+    
+    if (data.length === 0) {
+        return res.status(404).json({ success: false, message: "User not found!" });
+    }
 
     const user = data[0];
 
     if (user.status === "suspended") {
-      return res.status(403).json("Your account is suspended. Please contact admin.");
+      return res.status(403).json({ success: false, message: "Your account is suspended. Please contact admin." });
     }
 
-    const isPasswordCorrect = await bcrypt.compare(req.body.password, user.password);
-    if (!isPasswordCorrect) return res.status(400).json("Wrong credentials");
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    if (!isPasswordCorrect) {
+        return res.status(400).json({ success: false, message: "Wrong credentials" });
+    }
 
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
-    const { password, ...userData } = user;
+    const { password: _, ...userData } = user;
+
+    console.log("🟢 [Auth] User logged in:", user.id);
 
     res
       .cookie("accessToken", token, {
         httpOnly: true,
-        sameSite: "lax",           // "strict" blocks cross-origin cookies in dev
-        secure: false,             // must be false for http://localhost
+        secure: NODE_ENV === "production", // true in production
+        sameSite: "none",                  // Required for cross-origin (Vercel)
+        maxAge: 7 * 24 * 60 * 60 * 1000    // 7 days
       })
       .status(200)
-      .json(userData);
+      .json({
+        success: true,
+        message: "Logged in successfully",
+        data: userData
+      });
   } catch (err) {
-    console.error("[login] SQL error:", err);
-    return res.status(500).json({ error: "Server error during login" });
+    next(err);
   }
 };
 
-// LOGOUT
+/**
+ * Logs out a user
+ * Purpose: Clears the accessToken cookie
+ * Inputs: None
+ * Outputs: JSON response with success status
+ */
 export const logout = (req, res) => {
   res.clearCookie("accessToken", {
-    sameSite: "lax",
-    secure: false,
     httpOnly: true,
+    secure: NODE_ENV === "production",
+    sameSite: "none",
   });
-  res.status(200).json("User logged out");
+  res.status(200).json({ success: true, message: "User logged out successfully" });
 };
 
-// GET USER  (/auth/me)
-export const getUser = (req, res) => {
-  // Accept token from cookie OR Authorization header
-  const cookieToken = req.cookies?.accessToken;
-  const headerToken = req.headers?.authorization?.startsWith("Bearer ")
-    ? req.headers.authorization.split(" ")[1]
-    : null;
+/**
+ * Gets the current authenticated user
+ * Purpose: Returns user profile based on JWT in cookie or header
+ * Inputs: req.cookies.accessToken or req.headers.authorization
+ * Outputs: JSON response with user profile data
+ */
+export const getUser = async (req, res, next) => {
+  // Use req.user set by protect middleware if available, otherwise check tokens
+  const token = req.cookies?.accessToken || (req.headers?.authorization?.startsWith("Bearer ") ? req.headers.authorization.split(" ")[1] : null);
 
-  const token = cookieToken || headerToken;
+  if (!token) return res.status(401).json({ success: false, message: "Not authenticated" });
 
-  console.log("[getUser] cookie token present:", !!cookieToken, "| header token present:", !!headerToken);
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const rows = await sql`
+      SELECT id, username, email, role FROM users WHERE id = ${decoded.id}
+    `;
 
-  if (!token) return res.status(401).json("Not authenticated");
-
-  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
-    if (err) {
-      console.error("[getUser] JWT verify error:", err.message);
-      return res.status(401).json("Token invalid");
+    if (rows.length === 0) {
+        return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    try {
-      const rows = await sql`
-        SELECT id, username, email, role FROM users WHERE id = ${decoded.id}
-      `;
-
-      console.log("[getUser] rows found:", rows.length);
-
-      if (rows.length === 0) return res.status(404).json("User not found");
-
-      return res.status(200).json(rows[0]);
-    } catch (error) {
-      console.error("[getUser] Database error:", error);
-      return res.status(500).json("Internal server error");
+    return res.status(200).json({
+        success: true,
+        data: rows[0]
+    });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ success: false, message: "Token invalid" });
     }
-  });
+    next(error);
+  }
 };
 
-// VALIDATE TOKEN
+/**
+ * Validates a token
+ * Purpose: Checks if the request is authenticated
+ * Inputs: req.user (from protect middleware)
+ * Outputs: JSON response with validity status
+ */
 export const validateToken = (req, res) => {
   if (!req.user) {
-    return res.status(401).json({ message: "Token invalid or expired" });
+    return res.status(401).json({ success: false, message: "Token invalid or expired" });
   }
-  res.status(200).json({ message: "Token is valid" });
+  res.status(200).json({ success: true, message: "Token is valid" });
 };

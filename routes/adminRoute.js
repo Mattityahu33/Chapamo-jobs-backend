@@ -1,30 +1,29 @@
 import express from "express";
-
-import {getAllUsers, updateUserStatus, getPendingJobs, approveJob, rejectJob } from "../controllers/adminControllers.js";
-
-
+import { getAllUsers, updateUserStatus, getPendingJobs, approveJob, rejectJob } from "../controllers/adminControllers.js";
 import { verifyAdmin } from "../controllers/adminControllers.js";
+import { protect } from "../middlewares/AuthMiddleware.js";
 
 const router = express.Router();
 
-//ADMIN ROUTES 
+/**
+ * All admin routes require authentication and admin role
+ */
+router.use(protect);
+router.use(verifyAdmin);
 
-
-
-// Admin only: get all pending jobs
+// Get all pending jobs
 router.get("/pending", getPendingJobs);
 
-// Admin only: approve a job
-router.put("/:id/approve",  approveJob);
+// Approve a job
+router.put("/:id/approve", approveJob);
 
-// Admin only: reject a job
-router.put("/:id/reject",  rejectJob);
+// Reject a job
+router.put("/:id/reject", rejectJob);
 
-// get all users 
-
+// Get all users 
 router.get("/users", getAllUsers);
 
-// update users status
+// Update user status
 router.put("/users/:id/status", updateUserStatus);
 
 export default router;

@@ -1,12 +1,17 @@
 import sql from "../config/db.js";
 
-// ✅ Save a job
-export const saveJob = async (req, res) => {
+/**
+ * Saves a job for a user
+ * Purpose: Associates a job listing with a user's saved list
+ * Inputs: req.params.jobId, req.body.userId (should ideally be req.user.id)
+ * Outputs: JSON response with success status
+ */
+export const saveJob = async (req, res, next) => {
   const { userId } = req.body;
   const { jobId } = req.params;
 
   if (!userId || !jobId) {
-    return res.status(400).json({ error: "User ID and Job ID are required." });
+    return res.status(400).json({ success: false, message: "User ID and Job ID are required." });
   }
 
   try {
@@ -17,20 +22,24 @@ export const saveJob = async (req, res) => {
       SET status = 'saved', updated_at = CURRENT_TIMESTAMP
     `;
 
-    return res.status(200).json({ message: "Job saved successfully." });
+    return res.status(200).json({ success: true, message: "Job saved successfully." });
   } catch (err) {
-    console.error("❌ Error saving job:", err);
-    return res.status(500).json({ error: "Failed to save job." });
+    next(err);
   }
 };
 
-// ✅ Unsave a job
-export const unsaveJob = async (req, res) => {
+/**
+ * Unsaves a job for a user
+ * Purpose: Removes a job association from a user's saved list
+ * Inputs: req.params.jobId, req.body.userId
+ * Outputs: JSON response with success status
+ */
+export const unsaveJob = async (req, res, next) => {
   const { jobId } = req.params;
   const { userId } = req.body;
 
   if (!userId || !jobId) {
-    return res.status(400).json({ error: "User ID and Job ID are required." });
+    return res.status(400).json({ success: false, message: "User ID and Job ID are required." });
   }
 
   try {
@@ -39,22 +48,26 @@ export const unsaveJob = async (req, res) => {
     `;
 
     if (result.length === 0) {
-      return res.status(404).json({ error: "Job not found in saved list." });
+      return res.status(404).json({ success: false, message: "Job not found in saved list." });
     }
 
-    return res.status(200).json({ message: "Job unsaved successfully.", jobId });
+    return res.status(200).json({ success: true, message: "Job unsaved successfully.", data: { jobId } });
   } catch (err) {
-    console.error("❌ Error unsaving job:", err);
-    return res.status(500).json({ error: "Failed to unsave job." });
+    next(err);
   }
 };
 
-// ✅ Get all saved jobs for the logged-in user
-export const getSavedJobs = async (req, res) => {
+/**
+ * Fetches all saved jobs for a specific user
+ * Purpose: Retrieves a list of jobs saved by the user
+ * Inputs: req.query.userId
+ * Outputs: JSON response with an array of saved jobs
+ */
+export const getSavedJobs = async (req, res, next) => {
   const { userId } = req.query;
 
   if (!userId) {
-    return res.status(400).json({ error: "User ID is required." });
+    return res.status(400).json({ success: false, message: "User ID is required." });
   }
 
   try {
@@ -68,9 +81,11 @@ export const getSavedJobs = async (req, res) => {
       WHERE sj.user_id = ${userId}
     `;
 
-    return res.status(200).json(rows);
+    return res.status(200).json({
+        success: true,
+        data: rows
+    });
   } catch (err) {
-    console.error("❌ Error fetching saved jobs:", err);
-    return res.status(500).json({ error: "Failed to fetch saved jobs." });
+    next(err);
   }
 };

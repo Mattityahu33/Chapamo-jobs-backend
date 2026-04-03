@@ -1,33 +1,48 @@
 import sql from "../config/db.js";
-import jwt from "jsonwebtoken";
 
+/**
+ * Middleware to verify if the authenticated user is an admin
+ * Purpose: Restricts access to admin-only routes
+ * Inputs: req.user
+ * Outputs: Calls next() or returns 403 Forbidden
+ */
 export function verifyAdmin(req, res, next) {
   if (req.user && req.user.role === "admin") {
     next();
   } else {
-    res.status(403).json({ error: "Access denied" });
+    res.status(403).json({ success: false, message: "Access denied. Admin privileges required." });
   }
 }
 
-// Get all users
-export const getAllUsers = async (req, res) => {
+/**
+ * Fetches all registered users
+ * Purpose: Provides a list of all users for admin management
+ * Inputs: None
+ * Outputs: JSON response with an array of users
+ */
+export const getAllUsers = async (req, res, next) => {
   try {
     const rows = await sql`
       SELECT id, username, email, role, status, created_at FROM users
     `;
-    res.json(rows);
+    res.json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 };
 
-// Update user status (suspend/reactivate)
-export const updateUserStatus = async (req, res) => {
+/**
+ * Updates a user's status (e.g., active, suspended)
+ * Purpose: Allows admin to manage user account availability
+ * Inputs: req.params.id, req.body.status
+ * Outputs: JSON response with success status
+ */
+export const updateUserStatus = async (req, res, next) => {
   const { id } = req.params;
   const { status } = req.body;
 
   if (!["active", "suspended"].includes(status)) {
-    return res.status(400).json({ error: "Invalid status value" });
+    return res.status(400).json({ success: false, message: "Invalid status value. Must be 'active' or 'suspended'." });
   }
 
   try {
@@ -36,43 +51,58 @@ export const updateUserStatus = async (req, res) => {
     `;
 
     if (result.length === 0) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({ success: false, message: "User not found" });
     }
 
-    res.json({ message: `User status updated to ${status}` });
+    res.json({ success: true, message: `User status updated to ${status}` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 };
 
-// Get pending jobs
-export const getPendingJobs = async (req, res) => {
+/**
+ * Fetches all pending job postings
+ * Purpose: Provides a list of jobs awaiting admin approval
+ * Inputs: None
+ * Outputs: JSON response with an array of pending jobs
+ */
+export const getPendingJobs = async (req, res, next) => {
   try {
     const rows = await sql`SELECT * FROM job_postings WHERE status = 'pending'`;
-    res.json(rows);
+    res.json({ success: true, data: rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 };
 
-// Approve job
-export const approveJob = async (req, res) => {
+/**
+ * Approves a job posting
+ * Purpose: Changes job status to 'approved'
+ * Inputs: req.params.id
+ * Outputs: JSON response with success status
+ */
+export const approveJob = async (req, res, next) => {
   try {
     const jobId = req.params.id;
     await sql`UPDATE job_postings SET status = 'approved' WHERE id = ${jobId}`;
-    res.json({ message: "Job approved successfully" });
+    res.json({ success: true, message: "Job approved successfully" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 };
 
-// Reject job
-export const rejectJob = async (req, res) => {
+/**
+ * Rejects a job posting
+ * Purpose: Changes job status to 'rejected'
+ * Inputs: req.params.id
+ * Outputs: JSON response with success status
+ */
+export const rejectJob = async (req, res, next) => {
   try {
     const jobId = req.params.id;
     await sql`UPDATE job_postings SET status = 'rejected' WHERE id = ${jobId}`;
-    res.json({ message: "Job rejected successfully" });
+    res.json({ success: true, message: "Job rejected successfully" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 };

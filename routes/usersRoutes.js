@@ -4,9 +4,12 @@ import {
   saveJob,
   unsaveJob
 } from '../controllers/userController.js';
+import { protect } from '../middlewares/AuthMiddleware.js';
 
 const router = express.Router();
 
+// All saved-jobs routes require authentication
+router.use(protect);
 
 // Get all saved jobs for a user (expects ?userId=xx in query)
 router.get("/", getSavedJobs);

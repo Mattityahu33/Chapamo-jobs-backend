@@ -4,29 +4,21 @@ import {
   createPortfolio,
   getPortfolioByUserId,
   getPortfolioById,   
-// or getUserPortfolio if tied to a user
   updatePortfolio,
   deletePortfolio
 } from "../controllers/portfolioControllers.js";
+import { protect } from "../middlewares/AuthMiddleware.js";
+
 const router = express.Router();
 
-// GET all portfolios
+// Public routes
 router.get("/", getAllPortfolios);
-
-// GET portfolio by user ID (MUST come before /:id to avoid conflict)
-router.get('/user/me', getPortfolioByUserId); 
-
-// GET single portfolio by portfolio ID
 router.get("/:id", getPortfolioById); 
 
-
-// POST (create) new portfolio
-router.post("/", createPortfolio);
-
-// PUT (update) portfolio
-router.put("/:id", updatePortfolio);
-
-// DELETE portfolio
-router.delete("/:id", deletePortfolio);
+// Protected routes (require login)
+router.get('/user/me', protect, getPortfolioByUserId); 
+router.post("/", protect, createPortfolio);
+router.put("/:id", protect, updatePortfolio);
+router.delete("/:id", protect, deletePortfolio);
 
 export default router;

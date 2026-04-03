@@ -2,133 +2,129 @@ import sql from "../config/db.js";
 import jwt from "jsonwebtoken";
 import { JWT_SECRET } from "../config/env.js";
 
-// Helper: extract user ID from JWT cookie
-const getUserIdFromToken = (req, res) => {
-  const token = req.cookies.accessToken;
-  if (!token) {
-    res.status(401).json({ error: "Unauthorized. No token." });
-    return null;
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    return decoded.id;
-  } catch (err) {
-    res.status(403).json({ error: "Invalid or expired token." });
-    return null;
-  }
-};
-
-// 📌 GET ALL PORTFOLIOS (PUBLIC OR ADMIN)
-export const getAllPortfolios = async (req, res) => {
+/**
+ * Fetches all portfolios
+ * Purpose: Provides a list of all portfolios for public or admin view
+ * Inputs: None
+ * Outputs: JSON response with an array of portfolios
+ */
+export const getAllPortfolios = async (req, res, next) => {
   try {
     const rows = await sql`SELECT * FROM portfolios ORDER BY id DESC`;
     if (rows.length === 0) {
-      return res.status(404).json({ error: "No portfolios found" });
+      return res.status(404).json({ success: false, message: "No portfolios found" });
     }
-    res.status(200).json(rows);
+    res.status(200).json({ success: true, data: rows });
   } catch (error) {
-    console.error("Get All Portfolios Error:", error);
-    res.status(500).json({ error: "Server error fetching portfolios" });
+    next(error);
   }
 };
 
-// 📌 CREATE PORTFOLIO
-export const createPortfolio = async (req, res) => {
-  const token = req.cookies.accessToken;
-  if (!token) return res.status(401).json({ error: "Unauthorized. No token." });
+/**
+ * Creates a new portfolio for the authenticated user
+ * Purpose: Allows users to showcase their skills and experience
+ * Inputs: req.cookies.accessToken, req.body { full_name, profession_title, ... }
+ * Outputs: JSON response with success status
+ */
+export const createPortfolio = async (req, res, next) => {
+  // Authentication check is handled by middleware in the route
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
 
-  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
-    if (err) return res.status(403).json({ error: "Invalid token." });
+  const {
+    full_name,
+    profession_title,
+    phone,
+    email,
+    location,
+    about_me,
+    experience_years,
+    skills,
+    certifications,
+    languages,
+    availability,
+    portfolio_url,
+    profile_image_url
+  } = req.body;
 
-    const userId = decoded.id;
-    const {
-      full_name,
-      profession_title,
-      phone,
-      email,
-      location,
-      about_me,
-      experience_years,
-      skills,
-      certifications,
-      languages,
-      availability,
-      portfolio_url,
-      profile_image_url
-    } = req.body;
+  if (!full_name || !profession_title || !email || !location || !about_me) {
+    return res.status(400).json({ success: false, message: "Missing required fields." });
+  }
 
-    if (!full_name || !profession_title || !email || !location || !about_me) {
-      return res.status(400).json({ error: "Missing required fields." });
-    }
-
-    try {
-      await sql`
-        INSERT INTO portfolios (
-          user_id, full_name, profession_title, phone, email, location,
-          about_me, experience_years, skills, certifications, languages,
-          availability, portfolio_url, profile_image_url
-        ) VALUES (
-          ${userId}, ${full_name}, ${profession_title}, ${phone || null}, ${email}, ${location},
-          ${about_me}, ${experience_years ? Number(experience_years) : null}, ${skills || null},
-          ${certifications || null}, ${languages || null}, ${availability || "full-time"},
-          ${portfolio_url || null}, ${profile_image_url || null}
-        )
-      `;
-      res.status(201).json({ message: "Portfolio created successfully" });
-    } catch (error) {
-      console.error("Portfolio creation failed:", error);
-      res.status(500).json({ error: "Server error while creating portfolio" });
-    }
-  });
+  try {
+    await sql`
+      INSERT INTO portfolios (
+        user_id, full_name, profession_title, phone, email, location,
+        about_me, experience_years, skills, certifications, languages,
+        availability, portfolio_url, profile_image_url
+      ) VALUES (
+        ${userId}, ${full_name}, ${profession_title}, ${phone || null}, ${email}, ${location},
+        ${about_me}, ${experience_years ? Number(experience_years) : null}, ${skills || null},
+        ${certifications || null}, ${languages || null}, ${availability || "full-time"},
+        ${portfolio_url || null}, ${profile_image_url || null}
+      )
+    `;
+    res.status(201).json({ success: true, message: "Portfolio created successfully" });
+  } catch (error) {
+    next(error);
+  }
 };
 
-// 📌 GET USER PORTFOLIO
-export const getPortfolioByUserId = async (req, res) => {
-  const userId = getUserIdFromToken(req, res);
-  if (!userId) return;
+/**
+ * Fetches the portfolio of the currently authenticated user
+ * Purpose: Allows a user to view their own portfolio
+ * Inputs: req.user.id
+ * Outputs: JSON response with portfolio details
+ */
+export const getPortfolioByUserId = async (req, res, next) => {
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
 
   try {
     const rows = await sql`SELECT * FROM portfolios WHERE user_id = ${userId}`;
-    if (rows.length === 0) return res.status(404).json({ error: "Portfolio not found" });
-    res.status(200).json(rows[0]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Portfolio not found" });
+    res.status(200).json({ success: true, data: rows[0] });
   } catch (error) {
-    console.error("Fetch Portfolio Error:", error);
-    res.status(500).json({ error: "Server error fetching portfolio" });
+    next(error);
   }
 };
 
-// 📌 GET PORTFOLIO BY ID
-export const getPortfolioById = async (req, res) => {
+/**
+ * Fetches a portfolio by its ID
+ * Purpose: Provides detailed information for a specific portfolio
+ * Inputs: req.params.id
+ * Outputs: JSON response with portfolio details
+ */
+export const getPortfolioById = async (req, res, next) => {
   try {
     const portfolioId = parseInt(req.params.id);
     if (isNaN(portfolioId)) {
-      return res.status(400).json({ error: "Invalid portfolio ID" });
+      return res.status(400).json({ success: false, message: "Invalid portfolio ID" });
     }
 
     const results = await sql`SELECT * FROM portfolios WHERE id = ${portfolioId}`;
     if (results.length === 0) {
-      return res.status(404).json({ error: "Portfolio not found" });
+      return res.status(404).json({ success: false, message: "Portfolio not found" });
     }
-    res.json(results[0]);
+    res.json({ success: true, data: results[0] });
   } catch (err) {
-    console.error("Error fetching portfolio:", err);
-    res.status(500).json({ error: "Failed to fetch portfolio details" });
+    next(err);
   }
 };
 
-// 📌 UPDATE PORTFOLIO
-export const updatePortfolio = async (req, res) => {
-  const token = req.cookies.accessToken;
-  if (!token) return res.status(401).json({ error: "Unauthorized. No token." });
+/**
+ * Updates the portfolio of the currently authenticated user
+ * Purpose: Allows a user to modify their own portfolio
+ * Inputs: req.params.id, req.user.id, req.body { ... }
+ * Outputs: JSON response with success status
+ */
+export const updatePortfolio = async (req, res, next) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
 
-  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
-    if (err) return res.status(403).json({ error: "Invalid token." });
-
-    const userId = decoded.id;
     const portfolioId = parseInt(req.params.id);
     if (isNaN(portfolioId)) {
-      return res.status(400).json({ error: "Invalid portfolio ID" });
+      return res.status(400).json({ success: false, message: "Invalid portfolio ID" });
     }
 
     const {
@@ -153,7 +149,7 @@ export const updatePortfolio = async (req, res) => {
       `;
 
       if (existing.length === 0) {
-        return res.status(404).json({ error: "Portfolio not found or not yours" });
+        return res.status(404).json({ success: false, message: "Portfolio not found or unauthorized access" });
       }
 
       await sql`
@@ -173,26 +169,25 @@ export const updatePortfolio = async (req, res) => {
             profile_image_url = ${profile_image_url || existing[0].profile_image_url}
         WHERE id = ${portfolioId} AND user_id = ${userId}
       `;
-      res.status(200).json({ message: "Portfolio updated successfully" });
+      res.status(200).json({ success: true, message: "Portfolio updated successfully" });
     } catch (error) {
-      console.error("Portfolio update failed:", error);
-      res.status(500).json({ error: "Server error while updating portfolio" });
+      next(error);
     }
-  });
 };
 
-// 📌 DELETE PORTFOLIO
-export const deletePortfolio = async (req, res) => {
-  const token = req.cookies.accessToken;
-  if (!token) return res.status(401).json({ error: "Unauthorized. No token." });
+/**
+ * Deletes the portfolio of the currently authenticated user
+ * Purpose: Allows a user to remove their own portfolio permanently
+ * Inputs: req.params.id, req.user.id
+ * Outputs: JSON response with success status
+ */
+export const deletePortfolio = async (req, res, next) => {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ success: false, message: "Unauthorized. Please log in." });
 
-  jwt.verify(token, JWT_SECRET, async (err, decoded) => {
-    if (err) return res.status(403).json({ error: "Invalid token." });
-
-    const userId = decoded.id;
     const portfolioId = parseInt(req.params.id);
     if (isNaN(portfolioId)) {
-      return res.status(400).json({ error: "Invalid portfolio ID" });
+      return res.status(400).json({ success: false, message: "Invalid portfolio ID" });
     }
 
     try {
@@ -201,15 +196,13 @@ export const deletePortfolio = async (req, res) => {
       `;
 
       if (existing.length === 0) {
-        return res.status(404).json({ error: "Portfolio not found or not yours" });
+        return res.status(404).json({ success: false, message: "Portfolio not found or unauthorized access" });
       }
 
       await sql`DELETE FROM portfolios WHERE id = ${portfolioId} AND user_id = ${userId}`;
 
-      res.status(200).json({ message: "Portfolio deleted successfully" });
+      res.status(200).json({ success: true, message: "Portfolio deleted successfully" });
     } catch (error) {
-      console.error("Portfolio deletion failed:", error);
-      res.status(500).json({ error: "Server error while deleting portfolio" });
+      next(error);
     }
-  });
 };

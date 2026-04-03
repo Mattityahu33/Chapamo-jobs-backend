@@ -1,7 +1,12 @@
 import sql from "../config/db.js";
 
-// Unified search for jobs and portfolios
-export const unifiedSearch = async (req, res) => {
+/**
+ * Performs a unified search across jobs and portfolios
+ * Purpose: Provides a single endpoint for matching keyword and filters in both datasets
+ * Inputs: req.query { search, location, jobTypes, categories, remote, minSalary, maxSalary, ... }
+ * Outputs: JSON response with separate arrays for jobs and portfolios
+ */
+export const unifiedSearch = async (req, res, next) => {
   try {
     const {
       search,
@@ -9,8 +14,6 @@ export const unifiedSearch = async (req, res) => {
       jobTypes,
       categories,
       category,
-      industries,
-      industry,
       experienceLevels,
       remote,
       minSalary,
@@ -23,7 +26,7 @@ export const unifiedSearch = async (req, res) => {
     let portfolioParamIndex = 1;
 
     // ---------- Job Query ----------
-    let jobConditions = [`1=1`];
+    let jobConditions = [`status = 'approved'`];
 
     if (search) {
       const keyword = `%${search}%`;
@@ -103,9 +106,11 @@ export const unifiedSearch = async (req, res) => {
       portfolioParams
     );
 
-    res.status(200).json({ jobs, portfolios });
+    res.status(200).json({
+        success: true,
+        data: { jobs, portfolios }
+    });
   } catch (err) {
-    console.error("Unified search error:", err);
-    res.status(500).json({ error: "Search failed" });
+    next(err);
   }
 };
