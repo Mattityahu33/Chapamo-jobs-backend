@@ -15,6 +15,9 @@ import { protect } from "./middlewares/AuthMiddleware.js";
 
 const app = express();
 
+// Render/Vercel sit behind a proxy, so trust it when deriving HTTPS request state.
+app.set("trust proxy", 1);
+
 // 1. Security Headers
 app.use(helmet());
 

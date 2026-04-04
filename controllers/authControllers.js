@@ -3,8 +3,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import {
   JWT_SECRET,
-  JWT_EXPIRES_IN,
-  NODE_ENV
+  JWT_EXPIRES_IN
 } from "../config/env.js";
 
 /**
@@ -99,12 +98,9 @@ export const login = async (req, res, next) => {
     const { password: _, ...safeUser } = user;
 
     return res
-      .cookie("accessToken", token, {
-        httpOnly: true,
-        secure: NODE_ENV === "production",
-        sameSite: NODE_ENV === "production" ? "none" : "lax",
+      .cookie("accessToken", token, buildAuthCookieOptions(req, {
         maxAge: parseExpiryToMs(JWT_EXPIRES_IN)
-      })
+      }))
       .status(200)
       .json({
         success: true,
@@ -184,11 +180,7 @@ export const getUser = async (req, res, next) => {
  */
 export const logout = (req, res) => {
   return res
-    .clearCookie("accessToken", {
-      httpOnly: true,
-      secure: NODE_ENV === "production",
-      sameSite: NODE_ENV === "production" ? "none" : "lax"
-    })
+    .clearCookie("accessToken", buildAuthCookieOptions(req))
     .status(200)
     .json({
       success: true,
@@ -238,4 +230,18 @@ function parseExpiryToMs(exp) {
   };
 
   return value * (map[unit] || map.d);
+}
+
+function buildAuthCookieOptions(req, extraOptions = {}) {
+  // Hosted HTTPS requests need a cross-site cookie; local HTTP still works with lax.
+  const isSecureRequest =
+    req.secure || req.headers["x-forwarded-proto"] === "https";
+
+  return {
+    httpOnly: true,
+    secure: isSecureRequest,
+    sameSite: isSecureRequest ? "none" : "lax",
+    path: "/",
+    ...extraOptions
+  };
 }
