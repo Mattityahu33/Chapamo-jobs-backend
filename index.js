@@ -57,7 +57,7 @@ const globalLimiter = rateLimit({
 
 const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20, // stricter limit for auth routes
+    max: 2000, // stricter limit for auth routes
     message: { success: false, message: "Too many login/register attempts, please try again later." },
     standardHeaders: true,
     legacyHeaders: false,
