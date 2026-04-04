@@ -4,41 +4,28 @@ import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 
-import { FRONTEND_URL, PORT } from "./config/env.js";
+import { PORT, ALLOWED_ORIGINS } from "./config/env.js";  // import both here
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/usersRoutes.js";
 import portfolioRoute from "./routes/portfolioRoute.js";
 import jobsRoutes from "./routes/jobsRoutes.js"; 
 import searchRoutes from "./routes/searchRoutes.js";
-import adminRoute from "./routes/adminRoute.js"
+import adminRoute from "./routes/adminRoute.js";
 import { protect } from "./middlewares/AuthMiddleware.js";
-
 
 const app = express();
 
-// 1. Security Headers (Helmet)
+// 1. Security Headers
 app.use(helmet());
 
-// 2. CORS - Explicit origin and credentials
-// ⚠️ REQUIRED: Set this to your Vercel frontend URL in config/env.js
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.LOCAL_FRONTEND_URL
-]
-  .filter(Boolean) // remove undefined
-  .map(origin => origin.replace(/\/$/, "")); // remove trailing slash
-
+// 2. CORS - use centralized ALLOWED_ORIGINS
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow tools like Postman or server-to-server
-    if (!origin) return callback(null, true);
-
+    if (!origin) return callback(null, true); // allow Postman, server-to-server
     const normalizedOrigin = origin.replace(/\/$/, "");
-
-    if (allowedOrigins.includes(normalizedOrigin)) {
+    if (ALLOWED_ORIGINS.includes(normalizedOrigin)) {
       return callback(null, true);
     }
-
     return callback(new Error(`CORS blocked: ${origin}`));
   },
   credentials: true,
@@ -48,19 +35,19 @@ app.use(cors({
 
 // 3. Rate Limiting
 const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per window
-    message: { success: false, message: "Too many requests from this IP, please try again later." },
-    standardHeaders: true,
-    legacyHeaders: false,
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { success: false, message: "Too many requests from this IP, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 const authLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 2000, // stricter limit for auth routes
-    message: { success: false, message: "Too many login/register attempts, please try again later." },
-    standardHeaders: true,
-    legacyHeaders: false,
+  windowMs: 15 * 60 * 1000,
+  max: 2000,
+  message: { success: false, message: "Too many login/register attempts, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 app.use("/api/", globalLimiter);
@@ -76,38 +63,35 @@ app.use("/api/saved-jobs", userRoutes);
 app.use("/api/portfolios", portfolioRoute);
 app.use("/api/job_postings", jobsRoutes);
 app.use("/api/search", searchRoutes);
-app.use("/api/admin", adminRoute);
+app.use("/api/admin", protect, adminRoute);
 
 // Root route
 app.get("/", (_, res) => {
-    res.json({ success: true, message: "Hello from backend!!!!!" });
+  res.json({ success: true, message: "Hello from backend!!!!!" });
 });
 
 // Protected route example
-app.get('/api/protected', protect, (req, res) => {
-    res.json({ success: true, message: 'Protected content', userId: req.user.id });
+app.get("/api/protected", protect, (req, res) => {
+  res.json({ success: true, message: "Protected content", userId: req.user.id });
 });
 
-// 6. Global Error Handling Middleware
+// 6. Global Error Handling
 app.use((err, req, res, next) => {
-    console.error(`🔴 [Error] ${req.method} ${req.url}:`, err.stack);
-    
-    const statusCode = err.status || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(statusCode).json({
-        success: false,
-        message: message,
-        // Only include stack trace in development
-        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+  console.error(`🔴 [Error] ${req.method} ${req.url}:`, err.stack);
+  const statusCode = err.status || 500;
+  const message = err.message || "Internal Server Error";
+  res.status(statusCode).json({
+    success: false,
+    message,
+    stack: process.env.NODE_ENV === "development" ? err.stack : undefined
+  });
 });
 
-// Explicit listener (only used when running index.js directly)
-if (process.env.NODE_ENV !== 'test') {
-    app.listen(PORT, () => {
-        console.log(`🟢 Backend server running on port ${PORT}`);
-    });
+// Start server
+if (process.env.NODE_ENV !== "test") {
+  app.listen(PORT, () => {
+    console.log(`🟢 Backend server running on port ${PORT}`);
+  });
 }
 
 export default app;
