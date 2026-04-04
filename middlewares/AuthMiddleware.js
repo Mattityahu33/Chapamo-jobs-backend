@@ -8,32 +8,29 @@ import { JWT_SECRET } from '../config/env.js';
  * Output: Sets req.user or returns 401
  */
 export const protect = (req, res, next) => {
-  const token = req.cookies?.accessToken;
+  const token =
+    req.cookies?.accessToken ||
+    (req.headers.authorization?.startsWith("Bearer ")
+      ? req.headers.authorization.split(" ")[1]
+      : null);
 
   if (!token) {
     return res.status(401).json({
       success: false,
-      message: 'Missing authentication token. Please log in.'
+      message: "Missing authentication token"
     });
   }
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    if (!decoded?.id) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token payload.'
-      });
-    }
+    req.user = decoded; // 🔥 include all payload
 
-    req.user = { id: decoded.id };
     next();
   } catch (error) {
-    console.error('🔴 Token verification error:', error.message);
     return res.status(401).json({
       success: false,
-      message: 'Invalid or expired token. Please log in again.'
+      message: "Token expired or invalid"
     });
   }
 };
